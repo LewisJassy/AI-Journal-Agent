@@ -28,13 +28,13 @@ class AuthController {
     const { email } = req.body;
     try {
       const otp = this.generateOTP();
-      const expirysAt = new Date(Date.now() + 5 * 60000).toISOString();
+      const expiresAt = new Date(Date.now() + 5 * 60000).toISOString();
 
       await databases.createDocument(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_OTP_COLLECTION_ID,
         ID.unique(),
-        { email, otp, expirysAt }
+        { email, otp, expiresAt }
       );
 
       await sendEmail(
@@ -66,7 +66,7 @@ class AuthController {
         [
           Query.equal('email', email),
           Query.equal('otp', otp),
-          Query.greaterThan('expirysAt', new Date().toISOString())
+          Query.greaterThan('expiresAt', new Date().toISOString())
         ]
       );
 
