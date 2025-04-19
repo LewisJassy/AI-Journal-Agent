@@ -53,45 +53,72 @@ class AuthController {
 
   async verifyOTP(req, res) {
     const { email, otp } = req.body;
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
     try {
+      // 1. Verify OTP exists and is valid
       const otpDocs = await databases.listDocuments(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_OTP_COLLECTION_ID,
         [
           Query.equal('email', email),
           Query.equal('otp', otp),
-          Query.greaterThan('expiresAt', new Date().toISOString())
+          Query.greaterThan('expirysAt', new Date().toISOString())
         ]
       );
 
       if (otpDocs.documents.length === 0) {
-        return res.status(400).json({ error: 'Invalid or expired OTP' });
+        return res.status(400).json({ error: 'Invalid OTP or expired OTP' });
       }
 
-      // Auto-register user if not exists (no password needed)
+      // 2. Check if user exists using Users service (server-side)
+      let userExists = true;
+      let userId = null;
+      let tempPassword = '';
       let user;
       try {
-        user = await users.getByEmail(email);
+        // Try to find the user by email
+        const usersList = await users.list([Query.equal('email', email)]);
+        if (usersList.total === 0) {
+          userExists = false;
+        } else {
+          user = usersList.users[0];
+          userId = user.$id;
+        }
       } catch (err) {
-        if (err.code === 404) {
-          const tempPassword = this.generateOTP() + 'Aa!';
-          user = await users.create(ID.unique(), email, tempPassword);
-        } else throw err;
+        userExists = false;
       }
 
-      // Log the user in
-      const session = await account.createEmailSession(email, tempPassword);
-      
-      // Delete used OTP
-      await databases.deleteDocument(
+      // 3. Create user if doesn't exist
+      if (!userExists) {
+        const newUserId = ID.unique();
+        console.log(`Creating user with ID: ${newUserId}, email: ${email}`);
+        const newUser = await users.create(newUserId, email);
+        userId = newUser.$id;
+      }
+
+      // 4. Respond with userId and isNewUser (session creation is client-side)
+      await databases.updateDocument(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_OTP_COLLECTION_ID,
-        otpDocs.documents[0].$id
+        otpDocs.documents[0].$id,
+        { used: true }
       );
 
-      res.json({ userId: user.$id, sessionId: session.$id });
+      res.json({ 
+        userId,
+        isNewUser: !userExists,
+        tempPassword: !userExists ? tempPassword : undefined
+      });
     } catch (error) {
-      res.status(500).json({ error: 'Authentication failed' });
+      console.error('OTP Verification Error:', error);
+      res.status(500).json({ 
+        error: 'Authentication failed',
+        details: error.message 
+      });
     }
   }
 
