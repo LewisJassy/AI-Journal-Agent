@@ -7,7 +7,5 @@ import rateLimiterMiddleware from "../middlewares/rate_limiter.js"
 auth_router.post('/send-otp', rateLimiterMiddleware, authController.sendOTP);
 auth_router.post('/verify-otp', authController.verifyOTP);
 
-auth_router.post('/logout', authController.logout);
-auth_router.get('/profile', authController.getUserProfile);
 
 export default auth_router;

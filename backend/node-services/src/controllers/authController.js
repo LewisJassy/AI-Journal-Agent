@@ -18,8 +18,6 @@ class AuthController {
   constructor() {
     this.sendOTP = this.sendOTP.bind(this);
     this.verifyOTP = this.verifyOTP.bind(this);
-    this.logout = this.logout.bind(this);
-    this.getUserProfile = this.getUserProfile.bind(this);
   }
 
   generateOTP() {
@@ -53,13 +51,15 @@ class AuthController {
 
   async verifyOTP(req, res) {
     const { email, otp } = req.body;
+    
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email address' });
     }
+
     try {
-      // 1. Verify OTP exists and is valid
+      //Verify OTP
       const otpDocs = await databases.listDocuments(
         process.env.APPWRITE_DATABASE_ID,
         process.env.APPWRITE_OTP_COLLECTION_ID,
@@ -74,71 +74,71 @@ class AuthController {
         return res.status(400).json({ error: 'Invalid OTP or expired OTP' });
       }
 
-      // 2. Check if user exists using Users service (server-side)
-      let userExists = true;
-      let userId = null;
-      let tempPassword = '';
+      // Check if user exists using Users API (server-side proper)
       let user;
+      let isNewUser = false;
+      let tempPassword = '';
+      
       try {
-        // Try to find the user by email
         const usersList = await users.list([Query.equal('email', email)]);
-        if (usersList.total === 0) {
-          userExists = false;
-        } else {
+        if (usersList.users.length > 0) {
           user = usersList.users[0];
-          userId = user.$id;
+        } else {
+          isNewUser = true;
+          tempPassword = this.generateTempPassword();
+          user = await users.create(
+            ID.unique(), 
+            email,
+            undefined, 
+            tempPassword,
+            email
+          );
         }
-      } catch (err) {
-        userExists = false;
+
+        // Create session token (server-side approach)
+        const session = await this.createSession(email, isNewUser ? tempPassword : undefined);
+
+        await databases.updateDocument(
+          process.env.APPWRITE_DATABASE_ID,
+          process.env.APPWRITE_OTP_COLLECTION_ID,
+          otpDocs.documents[0].$id,
+          { used: true }
+        );
+
+        res.json({ 
+          userId: user.$id,
+          sessionId: session.$id,
+          isNewUser
+        });
+
+      } catch (error) {
+        console.error('User creation/session error:', error);
+        throw error;
       }
-
-      // 3. Create user if doesn't exist
-      if (!userExists) {
-        const newUserId = ID.unique();
-        console.log(`Creating user with ID: ${newUserId}, email: ${email}`);
-        const newUser = await users.create(newUserId, email);
-        userId = newUser.$id;
-      }
-
-      // 4. Respond with userId and isNewUser (session creation is client-side)
-      await databases.updateDocument(
-        process.env.APPWRITE_DATABASE_ID,
-        process.env.APPWRITE_OTP_COLLECTION_ID,
-        otpDocs.documents[0].$id,
-        { used: true }
-      );
-
-      res.json({ 
-        userId,
-        isNewUser: !userExists,
-        tempPassword: !userExists ? tempPassword : undefined
-      });
     } catch (error) {
       console.error('OTP Verification Error:', error);
       res.status(500).json({ 
         error: 'Authentication failed',
-        details: error.message 
+        details: error.message,
+        type: error.type || 'unknown_error'
       });
     }
-  }
+}
 
-  async logout(req, res) {
-    try {
-      await account.deleteSession('current');
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Logout failed' });
-    }
-  }
 
-  async getUserProfile(req, res) {
-    try {
-      const user = await account.get();
-      res.json(user);
-    } catch (error) {
-      res.status(401).json({ error: 'Unauthorized' });
-    }
+async createSession(email, password) {
+  if (password) {
+    return account.createEmailPasswordSession(email, password);
+  } else {
+    throw new Error('Password required for existing users');
   }
+}
+
+generateTempPassword() {
+  const random = Math.random().toString(36).slice(-8);
+  return `${random}@A1`;
+}
+
 }
 
 export default new AuthController();
