@@ -5,7 +5,7 @@ class JournalController {
 
     async createEntry(req, res) {
         try {
-            const userId = req.user && req.user.id;
+            const userId = req.user?.id || req.body.userId || req.headers['x-user-id'];
             if (!userId) {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
@@ -23,7 +23,8 @@ class JournalController {
 
     async getEntries(req, res) {
         try {
-            const userId = req.user && req.user.id;
+            const userId = req.user?.id || req.headers['x-user-id'];
+            console.log('Resolved userId:', userId);
             if (!userId) {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
@@ -37,7 +38,8 @@ class JournalController {
 
     async updateEntry(req, res) {
         try {
-            const userId = req.user && req.user.id;
+            const userId = req.user?.id || req.body.userId || req.headers['x-user-id'];
+            console.log('Resolved userId:', userId);
             if (!userId) {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
@@ -58,7 +60,8 @@ class JournalController {
 
     async deleteEntry(req, res) {
         try {
-            const userId = req.user && req.user.id;
+            const userId = req.user?.id || req.headers['x-user-id'];
+            console.log('Resolved userId:', userId);
             if (!userId) {
                 return res.status(401).json({ message: 'Unauthorized' });
             }
