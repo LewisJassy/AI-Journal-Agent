@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 const AI_SERVICE_URL = 'http://localhost:5000/api/ai'; // URL of the Python AI service
 
@@ -8,7 +8,7 @@ const aiService = {
             const response = await axios.post(AI_SERVICE_URL, data);
             return response.data;
         } catch (error) {
-            throw new Error('Error communicating with AI service: ' + error.message);
+            throw new Error(`Error communicating with AI service: ${error.message}`);
         }
     },
 
@@ -18,4 +18,4 @@ const aiService = {
     }
 };
 
-module.exports = aiService;
+export default aiService;
